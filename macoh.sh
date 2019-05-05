@@ -272,9 +272,8 @@ moh-get-ipg ()
 		set -e
 		rm -f $bin/done-ipg
 		echo "Fetching and installing Intel Power Gadget into /Applications ..."
-		wget $tmp/ipg.zip "$url_ipg" -#
-		unzip -q -o $tmp/ipg.zip -d $tmp
-		mnt $tmp/Intel*.dmg
+		wget $tmp/ipg.dmg "$url_ipg" -#
+		mnt $tmp/ipg.dmg
 		echo "Installing Intel Power Gadget may ask you to enter your Mac password."
 		sudo installer -pkg /Volumes/Intel*\ Power\ Gadget/Install\ Intel\ Power\ Gadget.pkg -target /
 		umnt /Volumes/Intel*\ Power\ Gadget
@@ -827,7 +826,7 @@ moh-plot () {
 	   y2axis min 400 max 4000 dticks 300 ftick 400
 	   ! xnames from d1
 	   ! key pos bl nobox offset 2.5 0.25
-	   data arg$(1) ignore 1 d1=c1,c9 d2=c1,c2 d3=c1,c3
+	   data arg$(1) ignore 1 d1=c1,c10 d2=c1,c3 d3=c1,c4
 	   ! d1 line color red key arg$(3)
 	   ! d2 x2axis y2axis line color !blue key ""+arg$(5)+""
 	   ! d3 line color green key arg$(4)
@@ -892,18 +891,23 @@ moh-plot () {
 	# Read TDP from igp's report ... need to log stderr for that
 	#TODO: log IGP stderr too
 
-	# Remove the 11 trailing lines (Intel decided to add non-csv at athe end) 
+	# Remove the 16 trailing lines (Intel decided to add non-csv at athe end) 
 	# and the first two columns (there's a bug in GLE: it can't properly read
 	# the xnames from a column different than 1st column; 
 	# "xnames from d1" reads the y values, instead of x values)
 	local lines=(`wc -l "$ipgcsv"`)
-	head -n $((${lines[0]}-11)) $ipgcsv | sed 's/^[^,]*,[^,]*,//' > $tmp/ipg.csv
+	head -n $((${lines[0]}-16)) $ipgcsv | sed 's/^[^,]*,[^,]*,//' > $tmp/ipg.csv
 	lines=(`wc -l $tmp/ipg.csv`)
 
+  # Remove extra quotes that qle cannot deal with
+	# Apparently Linux GNU and macOs CSD sed behave quite differently
+	# -i -e should work on both but supposedly creates and extra backup copy for the GNU version
+	sed -i -e 's/"//g' $tmp/ipg.csv
+
 	# Get max temp, max freq, duration and avg fps
-	local maxtemp=`cut -f9 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
-	local maxpow=`cut -f3 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
-	local maxfreq=`cut -f2 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
+	local maxtemp=`cut -f10 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
+	local maxpow=`cut -f4 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
+	local maxfreq=`cut -f3 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
 	printf -v maxpow "%.1f" $maxpow
 
 	# get TDP and Tmax
@@ -920,16 +924,16 @@ moh-plot () {
 	local readuseful="sed -n ${linestart},${lineend}p $tmp/ipg.csv"
 
 	# Get mean and stddev for temp
-	local avgfreq=`$readuseful | awk -F',' '{s+=$2} END {printf "%.0f\n", s/NR}'`
-	local avgpow=`$readuseful | awk -F',' '{s+=$3} END {printf "%.1f\n", s/NR}'`
-	local avgtemp=`$readuseful | awk -F',' '{s+=$9} END {printf "%.1f\n", s/NR}'`
-	local stdfreq=`$readuseful | awk -F',' '{d=$2-'$avgfreq';s+=d*d} END {printf "%.0f\n", sqrt(s/NR)}'`
-	local stdpow=`$readuseful | awk -F',' '{d=$3-'$avgpow';s+=d*d} END {printf "%.1f\n", sqrt(s/NR)}'`
-	local stdtemp=`$readuseful | awk -F',' '{d=$9-'$avgtemp';s+=d*d} END {printf "%.1f\n", sqrt(s/NR)}'`
+	local avgfreq=`$readuseful | awk -F',' '{s+=$3} END {printf "%.0f\n", s/NR}'`
+	local avgpow=`$readuseful | awk -F',' '{s+=$4} END {printf "%.1f\n", s/NR}'`
+	local avgtemp=`$readuseful | awk -F',' '{s+=$10} END {printf "%.1f\n", s/NR}'`
+	local stdfreq=`$readuseful | awk -F',' '{d=$3-'$avgfreq';s+=d*d} END {printf "%.0f\n", sqrt(s/NR)}'`
+	local stdpow=`$readuseful | awk -F',' '{d=$4-'$avgpow';s+=d*d} END {printf "%.1f\n", sqrt(s/NR)}'`
+	local stdtemp=`$readuseful | awk -F',' '{d=$10-'$avgtemp';s+=d*d} END {printf "%.1f\n", sqrt(s/NR)}'`
 
 	# compute how much the Temp and Power are >= the limits
-	local overlimpow=`$readuseful | awk -F',' '$3 > '$TDP' {s+=1} END {printf "%.1f%%\n", s/NR*100}'`
-	local overlimtemp=`$readuseful | awk -F',' '$9 > 0.95*'$Tmax' {s+=1} END {printf "%.1f%%\n", s/NR*100}'`
+	local overlimpow=`$readuseful | awk -F',' '$4 > '$TDP' {s+=1} END {printf "%.1f%%\n", s/NR*100}'`
+	local overlimtemp=`$readuseful | awk -F',' '$10 > 0.95*'$Tmax' {s+=1} END {printf "%.1f%%\n", s/NR*100}'`
 
 	# Parse log files and extract perf and duration strings
 	moh-perf-$do
