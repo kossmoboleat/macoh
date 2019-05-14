@@ -839,16 +839,16 @@ moh-plot () {
 	   d4 lstyle 2 color red
 	   !d5 lstyle 2 color red
 	   d6 lstyle 2 color green
-	end graph
 
-	begin key
-		position bl
-		!nobox
-		offset 2.5 0.25
-		line color red text arg$(3)
-		line color blue text arg$(5)
-		line color green text arg$(4)
-	end key
+		 	begin key
+				position tr
+				!nobox
+				offset 2.5 0.25
+				line color red text arg$(3)
+				line color blue text arg$(5)
+				line color green text arg$(4)
+			end key
+	end graph
 
 	! Left axis labels, we want multiple colors so we
 	! use tex instead of ytitle
